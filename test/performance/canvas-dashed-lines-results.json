@@ -1,0 +1,276 @@
+{
+  "base": "d4851af298ecf5e679938d0770b950a0b72d1e8d",
+  "date": "2026-10-30 Europe/Berlin",
+  "environment": {
+    "cpu": "AMD Ryzen 5 3600XT, 12 logical CPUs",
+    "os": "Linux x86_64",
+    "node": "24.18.0",
+    "mode": "Playwright headless, 800x600, device pixel ratio 1"
+  },
+  "baseline": {
+    "browser": "151.0.7922.34",
+    "results": [
+      {
+        "transitions": 0,
+        "count": 1,
+        "dashed": false,
+        "resolution": 256,
+        "median": 0.19999998807907104,
+        "max": 0.30000001192092896
+      },
+      {
+        "transitions": 0,
+        "count": 1,
+        "dashed": false,
+        "resolution": 16,
+        "median": 0.09999999403953552,
+        "max": 0.20000001788139343
+      },
+      {
+        "transitions": 0,
+        "count": 1,
+        "dashed": false,
+        "resolution": 1,
+        "median": 0.10000002384185791,
+        "max": 0.19999998807907104
+      },
+      {
+        "transitions": 0,
+        "count": 1,
+        "dashed": false,
+        "resolution": 0.25,
+        "median": 0.09999999403953552,
+        "max": 0.20000001788139343
+      },
+      {
+        "transitions": 160,
+        "count": 1,
+        "dashed": true,
+        "resolution": 256,
+        "median": 0.29999998211860657,
+        "max": 1.300000011920929
+      },
+      {
+        "transitions": 160,
+        "count": 1,
+        "dashed": true,
+        "resolution": 16,
+        "median": 0.19999998807907104,
+        "max": 0.30000001192092896
+      },
+      {
+        "transitions": 160,
+        "count": 1,
+        "dashed": true,
+        "resolution": 1,
+        "median": 0.20000001788139343,
+        "max": 0.30000001192092896
+      },
+      {
+        "transitions": 160,
+        "count": 1,
+        "dashed": true,
+        "resolution": 0.25,
+        "median": 0.19999998807907104,
+        "max": 0.29999998211860657
+      },
+      {
+        "transitions": 0,
+        "count": 25,
+        "dashed": false,
+        "resolution": 256,
+        "median": 0.19999998807907104,
+        "max": 3.5
+      },
+      {
+        "transitions": 0,
+        "count": 25,
+        "dashed": false,
+        "resolution": 16,
+        "median": 0.09999999403953552,
+        "max": 0.19999998807907104
+      },
+      {
+        "transitions": 0,
+        "count": 25,
+        "dashed": false,
+        "resolution": 1,
+        "median": 0.09999999403953552,
+        "max": 0.4000000059604645
+      },
+      {
+        "transitions": 0,
+        "count": 25,
+        "dashed": false,
+        "resolution": 0.25,
+        "median": 0.09999999403953552,
+        "max": 0.20000001788139343
+      },
+      {
+        "transitions": 160,
+        "count": 25,
+        "dashed": true,
+        "resolution": 256,
+        "median": 2.5,
+        "max": 2.699999988079071
+      },
+      {
+        "transitions": 160,
+        "count": 25,
+        "dashed": true,
+        "resolution": 16,
+        "median": 28.19999998807907,
+        "max": 34.5
+      },
+      {
+        "transitions": 160,
+        "count": 25,
+        "dashed": true,
+        "resolution": 1,
+        "median": 449.2000000178814,
+        "max": 458.10000002384186
+      },
+      {
+        "transitions": 0,
+        "count": 25,
+        "dashed": true,
+        "resolution": 0.25,
+        "median": 49.80000001192093,
+        "max": 55.900000005960464
+      }
+    ]
+  },
+  "clipped": {
+    "browser": "151.0.7922.34",
+    "results": [
+      {
+        "transitions": 0,
+        "count": 1,
+        "dashed": false,
+        "resolution": 256,
+        "median": 0.19999998807907104,
+        "max": 0.29999998211860657
+      },
+      {
+        "transitions": 0,
+        "count": 1,
+        "dashed": false,
+        "resolution": 16,
+        "median": 0.09999999403953552,
+        "max": 0.20000001788139343
+      },
+      {
+        "transitions": 0,
+        "count": 1,
+        "dashed": false,
+        "resolution": 1,
+        "median": 0,
+        "max": 0.10000002384185791
+      },
+      {
+        "transitions": 0,
+        "count": 1,
+        "dashed": false,
+        "resolution": 0.25,
+        "median": 0.09999999403953552,
+        "max": 0.10000002384185791
+      },
+      {
+        "transitions": 160,
+        "count": 1,
+        "dashed": true,
+        "resolution": 256,
+        "median": 0.19999998807907104,
+        "max": 3.5999999940395355
+      },
+      {
+        "transitions": 160,
+        "count": 1,
+        "dashed": true,
+        "resolution": 16,
+        "median": 0.19999998807907104,
+        "max": 0.20000001788139343
+      },
+      {
+        "transitions": 160,
+        "count": 1,
+        "dashed": true,
+        "resolution": 1,
+        "median": 0.19999998807907104,
+        "max": 0.20000001788139343
+      },
+      {
+        "transitions": 160,
+        "count": 1,
+        "dashed": true,
+        "resolution": 0.25,
+        "median": 0.19999998807907104,
+        "max": 0.30000001192092896
+      },
+      {
+        "transitions": 0,
+        "count": 25,
+        "dashed": false,
+        "resolution": 256,
+        "median": 0.09999999403953552,
+        "max": 1.199999988079071
+      },
+      {
+        "transitions": 0,
+        "count": 25,
+        "dashed": false,
+        "resolution": 16,
+        "median": 0.09999999403953552,
+        "max": 0.10000002384185791
+      },
+      {
+        "transitions": 0,
+        "count": 25,
+        "dashed": false,
+        "resolution": 1,
+        "median": 0.09999999403953552,
+        "max": 0.20000001788139343
+      },
+      {
+        "transitions": 0,
+        "count": 25,
+        "dashed": false,
+        "resolution": 0.25,
+        "median": 0.09999999403953552,
+        "max": 0.19999998807907104
+      },
+      {
+        "transitions": 160,
+        "count": 25,
+        "dashed": true,
+        "resolution": 256,
+        "median": 2,
+        "max": 3.199999988079071
+      },
+      {
+        "transitions": 160,
+        "count": 25,
+        "dashed": true,
+        "resolution": 16,
+        "median": 2.0999999940395355,
+        "max": 2.199999988079071
+      },
+      {
+        "transitions": 160,
+        "count": 25,
+        "dashed": true,
+        "resolution": 1,
+        "median": 2,
+        "max": 2.0999999940395355
+      },
+      {
+        "transitions": 160,
+        "count": 25,
+        "dashed": true,
+        "resolution": 0.25,
+        "median": 2.0999999940395355,
+        "max": 2.5
+      }
+    ]
+  }
+}
