@@ -65,6 +65,94 @@ describe('ol.render.canvas', function () {
         render.registerFont('12px monospace');
       }));
 
+    describe('font check batches', () => {
+      let faces, loads, finishLoading, changes;
+
+      beforeEach(async () => {
+        await document.fonts.ready;
+        faces = ['BatchA', 'BatchB'].map(
+          (family) => new FontFace(family, 'url(/unused.woff2)'),
+        );
+        finishLoading = [];
+        loads = faces.map((face, i) => {
+          document.fonts.add(face);
+          const loaded = new Promise((resolve) => {
+            finishLoading[i] = () => resolve(face);
+          });
+          return vi.spyOn(face, 'load').mockReturnValue(loaded);
+        });
+        changes = vi.fn();
+        render.checkedFonts.addEventListener('propertychange', changes);
+        vi.useFakeTimers();
+      });
+
+      afterEach(async () => {
+        finishLoading.forEach((finish) => finish());
+        await vi.advanceTimersByTimeAsync(1000);
+        vi.useRealTimers();
+        loads.forEach((load) => load.mockRestore());
+        faces.forEach((face) => document.fonts.delete(face));
+        render.checkedFonts.removeEventListener('propertychange', changes);
+        faces.forEach((face) => {
+          render.checkedFonts.unset(`normal 400 16px "${face.family}"`, true);
+        });
+      });
+
+      it('starts all loads before waiting and notifies after the batch', async () => {
+        render.registerFont('12px "BatchA", "BatchB"');
+        await vi.advanceTimersByTimeAsync(100);
+        assert.strictEqual(loads[0].mock.calls.length, 1);
+        assert.strictEqual(loads[1].mock.calls.length, 1);
+
+        finishLoading[0]();
+        await vi.advanceTimersByTimeAsync(0);
+        assert.strictEqual(changes.mock.calls.length, 0);
+
+        finishLoading[1]();
+        await vi.advanceTimersByTimeAsync(0);
+        assert.strictEqual(changes.mock.calls.length, 2);
+        assert.deepEqual(render.textHeights, {});
+      });
+
+      it('retries a failed load without suppressing an available font', async () => {
+        loads[0].mockRejectedValue(new Error('Font unavailable'));
+        render.registerFont('12px BatchA, BatchB');
+        await vi.advanceTimersByTimeAsync(100);
+        finishLoading[1]();
+        await vi.advanceTimersByTimeAsync(1000);
+        assert.strictEqual(changes.mock.calls.length, 1);
+        assert.strictEqual(
+          changes.mock.calls[0][0].key,
+          'normal 400 16px "BatchB"',
+        );
+        assert.strictEqual(loads[0].mock.calls.length, 10);
+        assert.strictEqual(
+          render.checkedFonts.get('normal 400 16px "BatchA"'),
+          retries,
+        );
+      });
+
+      it('checks fonts registered during a pending batch without overlapping', async () => {
+        render.registerFont('12px "BatchA"');
+        await vi.advanceTimersByTimeAsync(100);
+        render.registerFont('12px "BatchB"');
+        await vi.advanceTimersByTimeAsync(200);
+        assert.strictEqual(loads[0].mock.calls.length, 1);
+        assert.strictEqual(loads[1].mock.calls.length, 0);
+
+        finishLoading[0]();
+        await vi.advanceTimersByTimeAsync(100);
+        assert.strictEqual(loads[1].mock.calls.length, 1);
+        finishLoading[1]();
+        await vi.advanceTimersByTimeAsync(0);
+        assert.strictEqual(changes.mock.calls.length, 2);
+        assert.strictEqual(
+          render.checkedFonts.get('normal 400 16px "BatchB"'),
+          retries,
+        );
+      });
+    });
+
     it('triggers redraw and clear measurements for fonts that become available', () =>
       new Promise((resolve, reject) => {
         font.add();
