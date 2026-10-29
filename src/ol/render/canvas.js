@@ -226,13 +226,12 @@ export const registerFont = (function () {
 
   /**
    * @param {string} fontSpec Css font spec
-   * @return {Promise<boolean>} Font with style and weight is available
+   * @return {Array<FontFace>} Matching font faces.
    */
-  async function isAvailable(fontSpec) {
-    await fontFaceSet.ready;
+  function getFontFaces(fontSpec) {
     const fontParams = getFontParameters(fontSpec);
     if (!fontParams) {
-      return false;
+      return [];
     }
     const checkFamily = fontParams.families[0].toLowerCase();
     const checkWeight = fontParams.weight;
@@ -254,6 +253,16 @@ export const registerFont = (function () {
         }
       },
     );
+    return matching;
+  }
+
+  /**
+   * @param {string} fontSpec Css font spec
+   * @return {Promise<boolean>} Font with style and weight is available
+   */
+  async function isAvailable(fontSpec) {
+    await fontFaceSet.ready;
+    const matching = getFontFaces(fontSpec);
     if (matching.length === 0) {
       return false;
     }
@@ -319,8 +328,11 @@ export const registerFont = (function () {
       if (checkedFonts.get(key) !== undefined) {
         continue;
       }
-      checkedFonts.set(key, 0, true);
-      needCheck = true;
+      const faces = getFontFaces(key);
+      const available =
+        faces.length > 0 && faces.every((face) => face.status === 'loaded');
+      checkedFonts.set(key, available ? retries : 0, true);
+      needCheck = needCheck || !available;
     }
     if (needCheck) {
       clearTimeout(timeout);

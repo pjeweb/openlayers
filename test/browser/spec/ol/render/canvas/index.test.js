@@ -65,6 +65,72 @@ describe('ol.render.canvas', function () {
         render.registerFont('12px monospace');
       }));
 
+    it('does not invalidate measurements for a preloaded web font', async () => {
+      const face = new FontFace(
+        'Preloaded',
+        'url(/spec/ol/data/fonts/ubuntu-regular-webfont.woff2)',
+      );
+      await face.load();
+      document.fonts.add(face);
+      const spy = vi.fn();
+      render.checkedFonts.addEventListener('propertychange', spy);
+      try {
+        render.registerFont('12px Preloaded');
+        assert.strictEqual(
+          render.checkedFonts.get('normal 400 16px "Preloaded"'),
+          retries,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        assert.strictEqual(spy.mock.calls.length, 0);
+        assert.notDeepEqual(render.textHeights, {});
+      } finally {
+        render.checkedFonts.removeEventListener('propertychange', spy);
+        document.fonts.delete(face);
+      }
+    });
+
+    it('still checks unloaded subsets of a preloaded font', async () => {
+      const source = 'url(/spec/ol/data/fonts/ubuntu-regular-webfont.woff2)';
+      const latin = new FontFace('Subsets', source, {
+        unicodeRange: 'U+0000-00FF',
+      });
+      const greek = new FontFace('Subsets', source, {
+        unicodeRange: 'U+0370-03FF',
+      });
+      await latin.load();
+      document.fonts.add(latin);
+      document.fonts.add(greek);
+      let onPropertyChange;
+      try {
+        const loaded = new Promise((resolve) => {
+          onPropertyChange = (e) => {
+            if (e.key === 'normal 400 16px "Subsets"') {
+              resolve();
+            }
+          };
+          render.checkedFonts.addEventListener(
+            'propertychange',
+            onPropertyChange,
+          );
+        });
+        render.registerFont('12px Subsets');
+        assert.strictEqual(
+          render.checkedFonts.get('normal 400 16px "Subsets"'),
+          0,
+        );
+        await loaded;
+        assert.strictEqual(greek.status, 'loaded');
+        assert.deepEqual(render.textHeights, {});
+      } finally {
+        render.checkedFonts.removeEventListener(
+          'propertychange',
+          onPropertyChange,
+        );
+        document.fonts.delete(latin);
+        document.fonts.delete(greek);
+      }
+    });
+
     it('triggers redraw and clear measurements for fonts that become available', () =>
       new Promise((resolve, reject) => {
         font.add();
