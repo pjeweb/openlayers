@@ -221,6 +221,7 @@ export const registerFont = (function () {
   const retries = 100;
   /** @type {ReturnType<typeof setTimeout>|undefined} */
   let timeout;
+  let checking = false;
   /** @type {FontFaceSet} */
   let fontFaceSet;
 
@@ -273,30 +274,29 @@ export const registerFont = (function () {
   }
 
   async function check() {
+    checking = true;
     await fontFaceSet.ready;
-    let done = true;
     const checkedFontsProperties = checkedFonts.getProperties();
     const fonts = Object.keys(checkedFontsProperties).filter(
       (key) => checkedFontsProperties[key] < retries,
     );
+    const available = await Promise.all(fonts.map(isAvailable));
     for (let i = fonts.length - 1; i >= 0; --i) {
       const font = fonts[i];
       let currentRetries = checkedFontsProperties[font];
       if (currentRetries < retries) {
-        if (await isAvailable(font)) {
+        if (available[i]) {
           clear(textHeights);
           checkedFonts.set(font, retries);
         } else {
           currentRetries += 10;
           checkedFonts.set(font, currentRetries, true);
-          if (currentRetries < retries) {
-            done = false;
-          }
         }
       }
     }
+    checking = false;
     timeout = undefined;
-    if (!done) {
+    if (checkedFonts.getKeys().some((key) => checkedFonts.get(key) < retries)) {
       timeout = setTimeout(check, 100);
     }
   }
@@ -322,7 +322,7 @@ export const registerFont = (function () {
       checkedFonts.set(key, 0, true);
       needCheck = true;
     }
-    if (needCheck) {
+    if (needCheck && !checking) {
       clearTimeout(timeout);
       timeout = setTimeout(check, 100);
     }
