@@ -1682,6 +1682,332 @@ describe('ol/interaction/Draw', function () {
     });
   });
 
+  describe('#setType()', function () {
+    let draw;
+
+    beforeEach(function () {
+      draw = new Draw({source: source, type: 'LineString'});
+      map.addInteraction(draw);
+    });
+
+    function click(x, y) {
+      simulateEvent('pointermove', x, y);
+      simulateEvent('pointerdown', x, y);
+      simulateEvent('pointerup', x, y);
+    }
+
+    for (const type of [
+      'Point',
+      'MultiPoint',
+      'LineString',
+      'MultiLineString',
+      'Polygon',
+      'MultiPolygon',
+      'Circle',
+    ]) {
+      it(`draws ${type} after switching from another mode`, function () {
+        draw.setType(type === 'Circle' ? 'Polygon' : 'Circle');
+        draw.setType(type);
+        assert.strictEqual(draw.getType(), type);
+        click(10, 20);
+        if (type === 'Circle' || type.includes('LineString')) {
+          click(30, 20);
+          if (type !== 'Circle') {
+            click(30, 20);
+          }
+        } else if (type.includes('Polygon')) {
+          click(30, 20);
+          click(30, 40);
+          click(10, 20);
+        }
+        const features = source.getFeatures();
+        assert.lengthOf(features, 1);
+        const geometry = features[0].getGeometry();
+        assert.strictEqual(geometry.getType(), type);
+        if (type === 'Circle') {
+          assert.deepEqual(geometry.getCenter(), [10, -20]);
+          assert.strictEqual(geometry.getRadius(), 20);
+        } else {
+          let coordinates = [10, -20];
+          if (type.includes('LineString')) {
+            coordinates = [
+              [10, -20],
+              [30, -20],
+            ];
+          } else if (type.includes('Polygon')) {
+            coordinates = [
+              [
+                [10, -20],
+                [30, -20],
+                [30, -40],
+                [10, -20],
+              ],
+            ];
+          }
+          if (type.startsWith('Multi')) {
+            coordinates = [coordinates];
+          }
+          assert.deepEqual(geometry.getCoordinates(), coordinates);
+        }
+      });
+    }
+
+    it('updates the default drawing mode and point limits', function () {
+      draw.setType('MultiPolygon');
+      assert.strictEqual(draw.mode_, 'Polygon');
+      assert.strictEqual(draw.minPoints_, 3);
+      assert.strictEqual(draw.maxPoints_, Infinity);
+      click(10, 20);
+      click(30, 20);
+      click(30, 20);
+      assert.isEmpty(source.getFeatures());
+      draw.setType('Circle');
+      assert.strictEqual(draw.mode_, 'Circle');
+      assert.strictEqual(draw.minPoints_, 2);
+      assert.strictEqual(draw.maxPoints_, 2);
+      draw.setType('MultiLineString');
+      assert.strictEqual(draw.mode_, 'LineString');
+      assert.strictEqual(draw.minPoints_, 2);
+      assert.strictEqual(draw.maxPoints_, Infinity);
+      click(10, 20);
+      click(30, 20);
+      click(30, 20);
+      assert.lengthOf(source.getFeatures(), 1);
+    });
+
+    it('restores configured point limits after leaving Circle mode', function () {
+      map.removeInteraction(draw);
+      draw = new Draw({
+        source: source,
+        type: 'LineString',
+        minPoints: 4,
+        maxPoints: 4,
+      });
+      map.addInteraction(draw);
+      draw.setType('Circle');
+      assert.strictEqual(draw.maxPoints_, 2);
+      click(10, 20);
+      click(30, 20);
+      assert.lengthOf(source.getFeatures(), 1);
+      draw.setType('Polygon');
+      assert.strictEqual(draw.minPoints_, 4);
+      assert.strictEqual(draw.maxPoints_, 4);
+      click(10, 20);
+      click(30, 20);
+      click(30, 40);
+      assert.lengthOf(source.getFeatures(), 1);
+      click(10, 40);
+      assert.lengthOf(source.getFeatures(), 2);
+      assert.lengthOf(
+        source.getFeatures()[1].getGeometry().getCoordinates()[0],
+        5,
+      );
+    });
+
+    it('aborts once and lets listeners start a sketch with the new type', function () {
+      const start = vi.fn();
+      const end = vi.fn();
+      draw.on('drawstart', start);
+      draw.on('drawend', end);
+      click(10, 20);
+      const sketch = draw.sketchFeature_;
+      const overlay = draw.getOverlay();
+      const interactions = map.getInteractions().getArray().slice();
+      const abort = vi.fn((event) => {
+        assert.strictEqual(event.feature, sketch);
+        assert.strictEqual(draw.getType(), 'Polygon');
+        assert.isEmpty(overlay.getSource().getFeatures());
+        draw.appendCoordinates([
+          [0, 0],
+          [20, 0],
+          [20, 20],
+        ]);
+      });
+      draw.on('drawabort', abort);
+      draw.setType('Polygon');
+      assert.strictEqual(abort.mock.calls.length, 1);
+      assert.strictEqual(start.mock.calls.length, 2);
+      assert.strictEqual(end.mock.calls.length, 0);
+      assert.isEmpty(source.getFeatures());
+      assert.strictEqual(draw.getMap(), map);
+      assert.strictEqual(draw.getOverlay(), overlay);
+      assert.deepEqual(map.getInteractions().getArray(), interactions);
+      draw.finishDrawing();
+      assert.strictEqual(end.mock.calls.length, 1);
+      assert.strictEqual(
+        source.getFeatures()[0].getGeometry().getType(),
+        'Polygon',
+      );
+    });
+
+    it('leaves an active sketch alone when setting the current type', function () {
+      click(10, 20);
+      const sketch = draw.sketchFeature_;
+      const abort = vi.fn();
+      draw.on('drawabort', abort);
+      draw.setType('LineString');
+      assert.strictEqual(draw.sketchFeature_, sketch);
+      assert.strictEqual(abort.mock.calls.length, 0);
+      click(30, 20);
+      click(30, 20);
+      assert.lengthOf(source.getFeatures(), 1);
+    });
+
+    it('rejects an unsupported type without changing the sketch', function () {
+      click(10, 20);
+      const sketch = draw.sketchFeature_;
+      assert.throws(() => draw.setType('GeometryCollection'), 'Invalid type');
+      assert.strictEqual(draw.getType(), 'LineString');
+      assert.strictEqual(draw.sketchFeature_, sketch);
+      click(30, 20);
+      click(30, 20);
+      assert.lengthOf(source.getFeatures(), 1);
+    });
+
+    it('preserves custom geometry functions within the same drawing mode', function () {
+      map.removeInteraction(draw);
+      const geometryFunction = vi.fn((coordinates, geometry) => {
+        if (!geometry) {
+          geometry = new LineString([]);
+        }
+        geometry.setCoordinates(coordinates.map(([x, y]) => [x + 1, y]));
+        return geometry;
+      });
+      draw = new Draw({
+        source: source,
+        type: 'MultiLineString',
+        geometryFunction,
+      });
+      map.addInteraction(draw);
+      draw.setType('LineString');
+      click(10, 20);
+      click(30, 20);
+      click(30, 20);
+      assert.isAbove(geometryFunction.mock.calls.length, 0);
+      assert.deepEqual(source.getFeatures()[0].getGeometry().getCoordinates(), [
+        [11, -20],
+        [31, -20],
+      ]);
+    });
+
+    it('rejects mode changes with a custom function before aborting', function () {
+      map.removeInteraction(draw);
+      draw = new Draw({
+        source: source,
+        type: 'Circle',
+        geometryFunction: createBox(),
+      });
+      map.addInteraction(draw);
+      click(10, 20);
+      const sketch = draw.sketchFeature_;
+      assert.throws(() => draw.setType('Polygon'), 'custom geometryFunction');
+      assert.strictEqual(draw.getType(), 'Circle');
+      assert.strictEqual(draw.sketchFeature_, sketch);
+      click(30, 40);
+      assert.deepEqual(source.getFeatures()[0].getGeometry().getCoordinates(), [
+        [
+          [10, -40],
+          [30, -40],
+          [30, -20],
+          [10, -20],
+          [10, -40],
+        ],
+      ]);
+    });
+
+    it('cancels delayed pointer work and ignores the old pointerup', function () {
+      vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+      try {
+        simulateEvent('pointerdown', 10, 20);
+        assert.isDefined(draw.downTimeout_);
+        draw.setType('Polygon');
+        const move = vi.spyOn(draw, 'handlePointerMove_');
+        vi.advanceTimersByTime(1000);
+        simulateEvent('pointerup', 10, 20);
+        assert.strictEqual(move.mock.calls.length, 0);
+        assert.isUndefined(draw.downTimeout_);
+        assert.isEmpty(draw.getOverlay().getSource().getFeatures());
+        click(30, 40);
+        assert.strictEqual(
+          draw.sketchFeature_.getGeometry().getType(),
+          'Polygon',
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('cancels a freehand gesture and preserves the freehand condition', function () {
+      draw.setFreehand(true);
+      simulateEvent('pointerdown', 10, 20);
+      simulateEvent('pointermove', 30, 20);
+      simulateEvent('pointerdrag', 30, 20);
+      draw.setType('Point');
+      simulateEvent('pointerup', 30, 20);
+      assert.isEmpty(source.getFeatures());
+      click(50, 20);
+      assert.strictEqual(
+        source.getFeatures()[0].getGeometry().getType(),
+        'Point',
+      );
+      draw.setType('Polygon');
+      simulateEvent('pointerdown', 10, 20);
+      simulateEvent('pointermove', 30, 20);
+      simulateEvent('pointerdrag', 30, 20);
+      simulateEvent('pointermove', 30, 40);
+      simulateEvent('pointerdrag', 30, 40);
+      simulateEvent('pointerup', 10, 20);
+      assert.lengthOf(source.getFeatures(), 2);
+      assert.strictEqual(
+        source.getFeatures()[1].getGeometry().getType(),
+        'Polygon',
+      );
+    });
+
+    it('resets an active trace and retains tracing for subsequent sketches', function () {
+      source.addFeature(
+        new Feature(
+          new LineString([
+            [0, -50],
+            [100, -50],
+            [100, -100],
+          ]),
+        ),
+      );
+      draw.setTrace(true);
+      click(50, 50);
+      assert.isTrue(draw.traceState_.active);
+      draw.setType('Polygon');
+      assert.isFalse(draw.traceState_.active);
+      simulateEvent('pointermove', 75, 80);
+      assert.isNull(draw.sketchFeature_);
+      click(50, 50);
+      assert.isTrue(draw.traceState_.active);
+      assert.strictEqual(
+        draw.sketchFeature_.getGeometry().getType(),
+        'Polygon',
+      );
+    });
+
+    it('can switch types while detached or inactive without attaching the overlay', function () {
+      map.removeInteraction(draw);
+      draw.setType('Polygon');
+      assert.isNull(draw.getMap());
+      draw.setActive(false);
+      map.addInteraction(draw);
+      draw.setType('Circle');
+      assert.isFalse(draw.getActive());
+      assert.isUndefined(draw.getOverlay().getMapInternal());
+      draw.setActive(true);
+      click(10, 20);
+      click(30, 20);
+      assert.strictEqual(
+        source.getFeatures()[0].getGeometry().getType(),
+        'Circle',
+      );
+    });
+  });
+
   describe('#getType()', function () {
     it('returns the configured type before map attachment', function () {
       const draw = new Draw({type: 'MultiPolygon'});

@@ -85,7 +85,9 @@ import {
  * If the mode is `Circle`, and there is one point drawn, it will also contain a feature with a `Circle` geometry whose
  * center is the drawn point and the radius is determined by the distance between the drawn point and the cursor.
  * @property {GeometryFunction} [geometryFunction]
- * Function that is called when a geometry's coordinates are updated.
+ * Function that is called when a geometry's coordinates are updated. When
+ * provided, `setType()` can only switch between single- and multi-part versions
+ * of the same geometry type.
  * @property {string} [geometryName] Geometry name to use for features created
  * by the draw interaction.
  * @property {import("../events/condition.js").Condition} [condition] A function that
@@ -318,7 +320,7 @@ class Draw extends PointerInteraction {
     );
 
     /**
-     * Drawing mode (derived from geometry type.
+     * Drawing mode (derived from geometry type).
      * @type {Mode}
      * @private
      */
@@ -386,79 +388,62 @@ class Draw extends PointerInteraction {
 
     let geometryFunction = options.geometryFunction;
     if (!geometryFunction) {
-      const mode = this.mode_;
-      if (mode === 'Circle') {
-        /**
-         * @param {!LineCoordType} coordinates The coordinates.
-         * @param {import("../geom/SimpleGeometry.js").default|undefined} geometry Optional geometry.
-         * @param {import("../proj/Projection.js").default} projection The view projection.
-         * @return {import("../geom/SimpleGeometry.js").default} A geometry.
-         */
-        geometryFunction = /** @type {GeometryFunction} */ (
-          (coordinates, geometry, projection) => {
-            const circle = geometry
-              ? /** @type {Circle} */ (geometry)
-              : new Circle([NaN, NaN]);
-            const lineCoords = /** @type {LineCoordType} */ (coordinates);
-            const center = fromUserCoordinate(lineCoords[0], projection);
-            const squaredLength = squaredCoordinateDistance(
-              center,
-              fromUserCoordinate(lineCoords[lineCoords.length - 1], projection),
-            );
-            circle.setCenterAndRadius(
-              center,
-              Math.sqrt(squaredLength),
-              this.geometryLayout_,
-            );
-            const userProjection = getUserProjection();
-            if (userProjection) {
-              circle.transform(projection, userProjection);
-            }
-            return circle;
+      geometryFunction = (coordinates, geometry, projection) => {
+        const mode = this.mode_;
+        if (mode === 'Circle') {
+          const circle = geometry
+            ? /** @type {Circle} */ (geometry)
+            : new Circle([NaN, NaN]);
+          const lineCoords = /** @type {LineCoordType} */ (coordinates);
+          const center = fromUserCoordinate(lineCoords[0], projection);
+          const squaredLength = squaredCoordinateDistance(
+            center,
+            fromUserCoordinate(lineCoords[lineCoords.length - 1], projection),
+          );
+          circle.setCenterAndRadius(
+            center,
+            Math.sqrt(squaredLength),
+            this.geometryLayout_,
+          );
+          const userProjection = getUserProjection();
+          if (userProjection) {
+            circle.transform(projection, userProjection);
           }
-        );
-      } else {
-        /**
-         * @param {!SketchCoordType} coordinates The coordinates.
-         * @param {import("../geom/SimpleGeometry.js").default|undefined} geometry Optional geometry.
-         * @param {import("../proj/Projection.js").default} projection The view projection.
-         * @return {import("../geom/SimpleGeometry.js").default} A geometry.
-         */
-        geometryFunction = (coordinates, geometry, projection) => {
-          if (geometry) {
-            if (mode === 'Polygon') {
-              const polyCoords = /** @type {PolyCoordType} */ (coordinates);
-              if (polyCoords[0].length) {
-                // Add a closing coordinate to match the first
-                geometry.setCoordinates(
-                  [polyCoords[0].concat([polyCoords[0][0]])],
-                  this.geometryLayout_,
-                );
-              } else {
-                geometry.setCoordinates([], this.geometryLayout_);
-              }
+          return circle;
+        }
+        if (geometry) {
+          if (mode === 'Polygon') {
+            const polyCoords = /** @type {PolyCoordType} */ (coordinates);
+            if (polyCoords[0].length) {
+              // Add a closing coordinate to match the first
+              geometry.setCoordinates(
+                [polyCoords[0].concat([polyCoords[0][0]])],
+                this.geometryLayout_,
+              );
             } else {
-              geometry.setCoordinates(coordinates, this.geometryLayout_);
+              geometry.setCoordinates([], this.geometryLayout_);
             }
-          } else if (mode === 'Point') {
-            geometry = new Point(
-              /** @type {PointCoordType} */ (coordinates),
-              this.geometryLayout_,
-            );
-          } else if (mode === 'LineString') {
-            geometry = new LineString(
-              /** @type {LineCoordType} */ (coordinates),
-              this.geometryLayout_,
-            );
           } else {
-            geometry = new Polygon(
-              /** @type {PolyCoordType} */ (coordinates),
-              this.geometryLayout_,
-            );
+            geometry.setCoordinates(coordinates, this.geometryLayout_);
           }
-          return geometry;
-        };
-      }
+        } else if (mode === 'Point') {
+          geometry = new Point(
+            /** @type {PointCoordType} */ (coordinates),
+            this.geometryLayout_,
+          );
+        } else if (mode === 'LineString') {
+          geometry = new LineString(
+            /** @type {LineCoordType} */ (coordinates),
+            this.geometryLayout_,
+          );
+        } else {
+          geometry = new Polygon(
+            /** @type {PolyCoordType} */ (coordinates),
+            this.geometryLayout_,
+          );
+        }
+        return geometry;
+      };
     }
 
     /**
@@ -618,6 +603,56 @@ class Draw extends PointerInteraction {
   setMap(map) {
     super.setMap(map);
     this.updateState_();
+  }
+
+  /**
+   * Set the geometry type to draw. Supported types are `Point`, `LineString`,
+   * `Polygon`, their multi-part equivalents, and `Circle`.
+   * Changing the type aborts the current sketch and cancels the pending pointer
+   * gesture. Setting the current type does nothing.
+   *
+   * Configured `minPoints` and `maxPoints` are retained; otherwise the defaults
+   * for the new type apply. Circles always use two points.
+   *
+   * A custom `geometryFunction` is retained. With a custom function, only
+   * switches between single- and multi-part versions of the same type are
+   * supported. To change the drawing mode, create a new interaction with a
+   * suitable geometry function.
+   *
+   * @param {import("../geom/Geometry.js").Type} type Geometry type.
+   * @throws {Error} If the type is unsupported, or changes the drawing mode
+   * with a custom geometry function. The interaction is left unchanged.
+   * @api
+   */
+  setType(type) {
+    const mode = getMode(type);
+    if (type === this.type_) {
+      return;
+    }
+    if (this.options_.geometryFunction && mode !== this.mode_) {
+      throw new Error(
+        'Cannot change drawing mode with a custom geometryFunction',
+      );
+    }
+
+    if (this.downTimeout_ !== undefined) {
+      clearTimeout(this.downTimeout_);
+      this.downTimeout_ = undefined;
+    }
+    this.handlingDownUpSequence = false;
+    this.shouldHandle_ = false;
+    this.downPx_ = null;
+    this.lastDragTime_ = undefined;
+    this.ignoreNextUpEvent_ = false;
+
+    this.type_ = type;
+    this.mode_ = mode;
+    this.minPoints_ = this.options_.minPoints || (mode === 'Polygon' ? 3 : 2);
+    this.maxPoints_ =
+      mode === 'Circle' ? 2 : this.options_.maxPoints || Infinity;
+
+    // Notify listeners only after the interaction is ready for the new type.
+    this.abortDrawing();
   }
 
   /**
