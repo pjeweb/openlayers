@@ -53,6 +53,12 @@ class MultiPolygon extends SimpleGeometry {
 
     /**
      * @private
+     * @type {number}
+     */
+    this.flatInteriorPointsRotation_ = 0;
+
+    /**
+     * @private
      * @type {Array<number>|null}
      */
     this.flatInteriorPoints_ = null;
@@ -278,10 +284,14 @@ class MultiPolygon extends SimpleGeometry {
   }
 
   /**
+   * @param {number} [rotation] Scanline rotation in radians, counterclockwise.
    * @return {Array<number>} Flat interior points.
    */
-  getFlatInteriorPoints() {
-    if (this.flatInteriorPointsRevision_ != this.getRevision()) {
+  getFlatInteriorPoints(rotation = 0) {
+    if (
+      this.flatInteriorPointsRevision_ != this.getRevision() ||
+      this.flatInteriorPointsRotation_ !== rotation
+    ) {
       const flatCenters = linearRingssCenter(
         this.flatCoordinates,
         0,
@@ -294,8 +304,10 @@ class MultiPolygon extends SimpleGeometry {
         this.endss_,
         this.stride,
         flatCenters,
+        rotation,
       );
       this.flatInteriorPointsRevision_ = this.getRevision();
+      this.flatInteriorPointsRotation_ = rotation;
     }
     return /** @type {Array<number>} */ (this.flatInteriorPoints_);
   }

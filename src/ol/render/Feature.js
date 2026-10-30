@@ -99,6 +99,12 @@ class RenderFeature {
 
     /**
      * @private
+     * @type {number}
+     */
+    this.flatInteriorPointsRotation_ = 0;
+
+    /**
+     * @private
      * @type {Array<number>|null}
      */
     this.flatMidpoints_ = null;
@@ -165,10 +171,14 @@ class RenderFeature {
   }
 
   /**
+   * @param {number} [rotation] Scanline rotation in radians, counterclockwise.
    * @return {Array<number>} Flat interior points.
    */
-  getFlatInteriorPoint() {
-    if (!this.flatInteriorPoints_) {
+  getFlatInteriorPoint(rotation = 0) {
+    if (
+      !this.flatInteriorPoints_ ||
+      this.flatInteriorPointsRotation_ !== rotation
+    ) {
       const flatCenter = getCenter(this.getExtent());
       this.flatInteriorPoints_ = getInteriorPointOfArray(
         this.flatCoordinates_,
@@ -177,16 +187,23 @@ class RenderFeature {
         this.stride_,
         flatCenter,
         0,
+        undefined,
+        rotation,
       );
     }
+    this.flatInteriorPointsRotation_ = rotation;
     return this.flatInteriorPoints_;
   }
 
   /**
+   * @param {number} [rotation] Scanline rotation in radians, counterclockwise.
    * @return {Array<number>} Flat interior points.
    */
-  getFlatInteriorPoints() {
-    if (!this.flatInteriorPoints_) {
+  getFlatInteriorPoints(rotation = 0) {
+    if (
+      !this.flatInteriorPoints_ ||
+      this.flatInteriorPointsRotation_ !== rotation
+    ) {
       const ends = inflateEnds(
         this.flatCoordinates_,
         /** @type {Array<number>} */ (this.ends_),
@@ -203,8 +220,10 @@ class RenderFeature {
         ends,
         this.stride_,
         flatCenters,
+        rotation,
       );
     }
+    this.flatInteriorPointsRotation_ = rotation;
     return this.flatInteriorPoints_;
   }
 
