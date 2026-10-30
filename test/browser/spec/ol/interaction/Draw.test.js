@@ -1682,6 +1682,13 @@ describe('ol/interaction/Draw', function () {
     });
   });
 
+  describe('#getType()', function () {
+    it('returns the configured type before map attachment', function () {
+      const draw = new Draw({type: 'MultiPolygon'});
+      assert.strictEqual(draw.getType(), 'MultiPolygon');
+    });
+  });
+
   describe('#setFreehand()', function () {
     let interaction;
 

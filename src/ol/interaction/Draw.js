@@ -621,6 +621,16 @@ class Draw extends PointerInteraction {
   }
 
   /**
+   * Get the configured geometry type, including multi-part types. A custom
+   * geometry function may produce a different geometry type.
+   * @return {import("../geom/Geometry.js").Type} Geometry type.
+   * @api
+   */
+  getType() {
+    return this.type_;
+  }
+
+  /**
    * Set whether the drawing is done in freehand mode.
    *
    * @param {boolean} freehand Freehand drawing.
