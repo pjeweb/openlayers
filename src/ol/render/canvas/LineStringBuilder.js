@@ -37,19 +37,32 @@ class CanvasLineStringBuilder extends CanvasBuilder {
     const strokeOffsetValue =
       (strokeOffset ?? defaultStrokeOffset) * this.pixelRatio;
     const myBegin = this.coordinates.length;
-    const myEnd = this.appendFlatLineCoordinates(
-      flatCoordinates,
-      offset,
-      end,
-      stride,
-      false,
-      false,
-    );
+    // Dashed lines need every vertex, including offscreen bends, to retain
+    // their phase. They are clipped after transformation in the executor.
+    const dashed = this.state?.lineDash?.some((dash) => dash > 0);
+    let myEnd;
+    if (dashed) {
+      for (let i = offset; i < end; i += stride) {
+        this.coordinates.push(flatCoordinates[i], flatCoordinates[i + 1]);
+      }
+      myEnd = this.coordinates.length;
+    } else {
+      myEnd = this.appendFlatLineCoordinates(
+        flatCoordinates,
+        offset,
+        end,
+        stride,
+        false,
+        false,
+      );
+    }
     this.instructions.push([
       CanvasInstruction.MOVE_TO_LINE_TO,
       myBegin,
       myEnd,
       strokeOffsetValue,
+      false,
+      dashed,
     ]);
     this.hitDetectionInstructions.push([
       CanvasInstruction.MOVE_TO_LINE_TO,

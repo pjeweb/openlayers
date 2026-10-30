@@ -1102,9 +1102,10 @@ class CanvasVectorTileLayerRenderer extends CanvasTileLayerRenderer {
       const executorGroup = executorGroups[i];
       executorGroup.execute(
         context,
+        // Canvas size in pixel coordinates, before the renderScale transform.
         [
-          context.canvas.width * renderScale,
-          context.canvas.height * renderScale,
+          context.canvas.width / renderScale,
+          context.canvas.height / renderScale,
         ],
         transform,
         0,

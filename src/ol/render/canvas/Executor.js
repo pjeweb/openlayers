@@ -26,6 +26,7 @@ import {
 } from '../canvas.js';
 import ZIndexContext from '../canvas/ZIndexContext.js';
 import CanvasInstruction from './Instruction.js';
+import {drawClippedLineString} from './lineDash.js';
 import {TEXT_ALIGN} from './TextBuilder.js';
 
 /**
@@ -742,6 +743,8 @@ class Executor {
       fillKey;
     let pendingFill = 0;
     let pendingStroke = 0;
+    let dashPeriod = 0;
+    const dashExtent = [0, 0, 0, 0];
     const coordinateCache = this.coordinateCache_;
     const viewRotation = this.viewRotation_;
     const viewRotationFromTransform =
@@ -1273,6 +1276,18 @@ class Executor {
             lineStart = d;
             lineEnd = dd;
           }
+          if (instruction[5] && dashPeriod > 0 && Number.isFinite(dashPeriod)) {
+            drawClippedLineString(
+              context,
+              lineCoords,
+              lineStart,
+              lineEnd,
+              dashPeriod,
+              dashExtent,
+            );
+            ++i;
+            break;
+          }
           x = lineCoords[lineStart];
           y = lineCoords[lineStart + 1];
           context.moveTo(x, y);
@@ -1320,6 +1335,19 @@ class Executor {
             pendingStroke = 0;
           }
           this.setStrokeStyle_(context, /** @type {Array<*>} */ (instruction));
+          const dash = /** @type {Array<number>} */ (instruction[6]);
+          dashPeriod = dash ? dash.reduce((sum, value) => sum + value, 0) : 0;
+          if (dash && dash.length % 2) {
+            dashPeriod *= 2;
+          }
+          // Keep artificial caps and joins outside the canvas, even for wide
+          // strokes and sharp miters. Use the current canvas so cached replays
+          // follow pans and transforms, independently of the builder extent.
+          const margin = instruction[2] * Math.max(1, instruction[5]) + 1;
+          dashExtent[0] = -margin;
+          dashExtent[1] = -margin;
+          dashExtent[2] = scaledCanvasSize[0] + margin;
+          dashExtent[3] = scaledCanvasSize[1] + margin;
           ++i;
           break;
         case CanvasInstruction.STROKE:
