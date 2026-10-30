@@ -14,8 +14,14 @@ import {
   getTopLeft,
   intersects,
   subtractExtents,
+  wrapX as wrapExtentX,
 } from '../../extent.js';
-import {equivalent, getTransform, transformExtent} from '../../proj.js';
+import {
+  equivalent,
+  fromUserExtent,
+  getTransform,
+  transformExtent,
+} from '../../proj.js';
 import CanvasBuilderGroup from '../../render/canvas/BuilderGroup.js';
 import CanvasExecutorGroup, {
   DECLUTTER,
@@ -438,6 +444,19 @@ class CanvasVectorTileLayerRenderer extends CanvasTileLayerRenderer {
       );
     const layerUid = getUid(layer);
     const declutter = layer.getDeclutter();
+    const layerExtent = declutter
+      ? frameState.layerStatesArray.find((state) => state.layer === layer)
+          ?.extent
+      : undefined;
+    let declutterExtent = layerExtent
+      ? fromUserExtent(layerExtent, frameState.viewState.projection).slice()
+      : undefined;
+    if (declutterExtent && layer.getSource()?.getWrapX()) {
+      declutterExtent = wrapExtentX(
+        declutterExtent,
+        frameState.viewState.projection,
+      );
+    }
     const declutteredFeatures = declutter
       ? (frameState.declutter?.[declutter]?.all().map((item) => item.value) ??
         [])
@@ -459,6 +478,7 @@ class CanvasVectorTileLayerRenderer extends CanvasTileLayerRenderer {
           hitTolerance,
           featureCallback,
           declutteredFeatures,
+          declutter ? declutterExtent : undefined,
         );
         if (found) {
           break foundFeature;
@@ -661,6 +681,10 @@ class CanvasVectorTileLayerRenderer extends CanvasTileLayerRenderer {
     const declutterTree = declutter
       ? frameState.declutter?.[declutter]
       : undefined;
+    const source = this.getLayer().getSource();
+    const tileGrid = source?.getTileGridForProjection(
+      frameState.viewState.projection,
+    );
     const layerUid = getUid(this.getLayer());
     const tiles =
       /** @type {Array<import("../../VectorRenderTile.js").default>} */ (
@@ -669,6 +693,19 @@ class CanvasVectorTileLayerRenderer extends CanvasTileLayerRenderer {
     for (let i = 0, ii = tiles.length; i < ii; ++i) {
       const tile = tiles[i];
       const executorGroups = tile.executorGroups[layerUid];
+      const worldOffset =
+        this.layerExtent && tileGrid
+          ? tileGrid.getTileCoordExtent(tile.tileCoord)[0] -
+            tileGrid.getTileCoordExtent(tile.wrappedTileCoord)[0]
+          : 0;
+      const declutterExtent = this.layerExtent
+        ? [
+            this.layerExtent[0] - worldOffset,
+            this.layerExtent[1],
+            this.layerExtent[2] - worldOffset,
+            this.layerExtent[3],
+          ]
+        : undefined;
       if (executorGroups) {
         for (let j = executorGroups.length - 1; j >= 0; --j) {
           executorGroups[j].execute(
@@ -679,6 +716,7 @@ class CanvasVectorTileLayerRenderer extends CanvasTileLayerRenderer {
             hifi,
             DECLUTTER,
             declutterTree,
+            declutterExtent,
           );
         }
       }

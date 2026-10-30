@@ -686,7 +686,7 @@ class Executor {
    * @param {Array<*>} instructions Instructions array.
    * @param {boolean} snapToPixel Snap point symbols and text to integer pixels.
    * @param {FeatureCallback<T>} [featureCallback] Feature callback.
-   * @param {import("../../extent.js").Extent} [hitExtent] Only check
+   * @param {import("../../extent.js").Extent} [geometryExtent] Only process
    *     features that intersect this extent.
    * @param {import("rbush").default<DeclutterEntry>} [declutterTree] Declutter tree.
    * @return {T|undefined} Callback result.
@@ -699,7 +699,7 @@ class Executor {
     instructions,
     snapToPixel,
     featureCallback,
-    hitExtent,
+    geometryExtent,
     declutterTree,
   ) {
     const zIndexContext = this.zIndexContext_;
@@ -774,8 +774,8 @@ class Executor {
           if (!feature.getGeometry()) {
             i = /** @type {number} */ (instruction[2]);
           } else if (
-            hitExtent !== undefined &&
-            !intersects(hitExtent, currentGeometry.getExtent())
+            geometryExtent !== undefined &&
+            !intersects(geometryExtent, currentGeometry.getExtent())
           ) {
             i = /** @type {number} */ (instruction[2]) + 1;
           } else {
@@ -1351,6 +1351,7 @@ class Executor {
    * @param {number} viewRotation View rotation.
    * @param {boolean} snapToPixel Snap point symbols and text to integer pixels.
    * @param {import("rbush").default<DeclutterEntry>} [declutterTree] Declutter tree.
+   * @param {import("../../extent.js").Extent} [renderExtent] Only render geometries intersecting this extent.
    */
   execute(
     context,
@@ -1359,6 +1360,7 @@ class Executor {
     viewRotation,
     snapToPixel,
     declutterTree,
+    renderExtent,
   ) {
     this.viewRotation_ = viewRotation;
     this.execute_(
@@ -1368,7 +1370,7 @@ class Executor {
       this.instructions,
       snapToPixel,
       undefined,
-      undefined,
+      renderExtent,
       declutterTree,
     );
   }

@@ -4,7 +4,12 @@
 
 import {ascending, descending} from '../../array.js';
 import {createCanvasContext2D} from '../../dom.js';
-import {buffer, createEmpty, extendCoordinate} from '../../extent.js';
+import {
+  buffer,
+  createEmpty,
+  extendCoordinate,
+  getIntersection,
+} from '../../extent.js';
 import {transform2D} from '../../geom/flat/transform.js';
 import {isEmpty} from '../../obj.js';
 import {
@@ -229,6 +234,7 @@ class ExecutorGroup {
    * @param {number} hitTolerance Hit tolerance in pixels.
    * @param {function(import("../../Feature.js").FeatureLike, import("../../geom/SimpleGeometry.js").default, number): T} callback Feature callback.
    * @param {Array<import("../../Feature.js").FeatureLike>} declutteredFeatures Decluttered features.
+   * @param {import("../../extent.js").Extent} [declutterExtent] Layer extent in replay coordinates.
    * @return {T|undefined} Callback result.
    * @template T
    */
@@ -239,6 +245,7 @@ class ExecutorGroup {
     hitTolerance,
     callback,
     declutteredFeatures,
+    declutterExtent,
   ) {
     if (canvasReadsBenchmarked === false) {
       benchmarkCanvasReads();
@@ -293,6 +300,10 @@ class ExecutorGroup {
       );
     }
 
+    const declutterHitExtent =
+      declutterExtent && hitExtent
+        ? getIntersection(hitExtent, declutterExtent)
+        : declutterExtent;
     const indexes = getPixelIndexArray(hitTolerance);
 
     /** @type {import("../canvas.js").BuilderType} */
@@ -354,7 +365,10 @@ class ExecutorGroup {
             transform,
             rotation,
             featureCallback,
-            hitExtent,
+            declutterHitExtent &&
+              (builderType === 'Image' || builderType === 'Text')
+              ? declutterHitExtent
+              : hitExtent,
           );
           if (result) {
             return result;
@@ -400,6 +414,8 @@ class ExecutorGroup {
    *     Default is {@link module:ol/render/replay~ALL}
    * @param {import("rbush").default<import('./Executor.js').DeclutterEntry>|null} [declutterTree] Declutter tree.
    *     When set to null, no decluttering is done, even when the executor group has a `ZIndexContext`.
+   * @param {import("../../extent.js").Extent} [declutterExtent] Only declutter geometries intersecting this extent.
+   *     Unlike the buffered replay extent, this is the actual layer extent in replay coordinates.
    */
   execute(
     targetContext,
@@ -409,6 +425,7 @@ class ExecutorGroup {
     snapToPixel,
     builderTypes,
     declutterTree,
+    declutterExtent,
   ) {
     const zs = Object.keys(this.executorsByZIndex_).map(Number);
     zs.sort(declutterTree ? descending : ascending);
@@ -449,6 +466,7 @@ class ExecutorGroup {
               viewRotation,
               /** @type {boolean} */ (snapToPixel),
               /** @type {?} */ (declutterTree),
+              declutterTree ? declutterExtent : undefined,
             );
           } else {
             zIndexContext.pushFunction((context) =>

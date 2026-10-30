@@ -195,7 +195,7 @@ class CanvasVectorImageLayerRenderer extends CanvasImageLayerRenderer {
               imageFrameState,
               /** @type {HTMLElement} */ (/** @type {unknown} */ (null)),
             );
-            vectorRenderer.renderDeclutter(imageFrameState);
+            vectorRenderer.renderDeclutter(imageFrameState, imageLayerState);
             vectorRenderer.renderDeferred(imageFrameState);
             callback();
           }

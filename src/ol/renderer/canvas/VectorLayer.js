@@ -196,8 +196,9 @@ class CanvasVectorLayerRenderer extends CanvasLayerRenderer {
    * @param {import("../../Map.js").FrameState} frameState Frame state.
    * @param {boolean} [declutterable] `true` to only render declutterable items,
    *     `false` to only render non-declutterable items, `undefined` to render all.
+   * @param {import("../../extent.js").Extent} [declutterExtent] Layer extent for filtering declutter candidates.
    */
-  renderWorlds(executorGroup, frameState, declutterable) {
+  renderWorlds(executorGroup, frameState, declutterable, declutterExtent) {
     const extent = frameState.extent;
     const viewState = frameState.viewState;
     const center = viewState.center;
@@ -269,6 +270,14 @@ class CanvasVectorLayerRenderer extends CanvasLayerRenderer {
                 )[declutter]
             )
           : undefined,
+        declutterExtent
+          ? [
+              declutterExtent[0] - world * (worldWidth || 0),
+              declutterExtent[1],
+              declutterExtent[2] - world * (worldWidth || 0),
+              declutterExtent[3],
+            ]
+          : undefined,
       );
     } while (++world < endWorld);
   }
@@ -327,12 +336,20 @@ class CanvasVectorLayerRenderer extends CanvasLayerRenderer {
   /**
    * Render declutter items for this layer
    * @param {import("../../Map.js").FrameState} frameState Frame state.
+   * @param {import("../../layer/Layer.js").State} layerState Layer state.
    */
-  renderDeclutter(frameState) {
+  renderDeclutter(frameState, layerState) {
     if (!this.replayGroup_ || !this.getLayer().getDeclutter()) {
       return;
     }
-    this.renderWorlds(this.replayGroup_, frameState, true);
+    this.renderWorlds(
+      this.replayGroup_,
+      frameState,
+      true,
+      layerState.extent
+        ? fromUserExtent(layerState.extent, frameState.viewState.projection)
+        : undefined,
+    );
   }
 
   /**
@@ -638,6 +655,19 @@ class CanvasVectorLayerRenderer extends CanvasLayerRenderer {
     };
 
     const declutter = this.getLayer().getDeclutter();
+    const layerExtent = declutter
+      ? frameState.layerStatesArray.find((state) => state.layer === layer)
+          ?.extent
+      : undefined;
+    let declutterExtent = layerExtent
+      ? fromUserExtent(layerExtent, frameState.viewState.projection).slice()
+      : undefined;
+    if (declutterExtent && layer.getSource()?.getWrapX()) {
+      declutterExtent = wrapExtentX(
+        declutterExtent,
+        frameState.viewState.projection,
+      );
+    }
     return this.replayGroup_.forEachFeatureAtCoordinate(
       coordinate,
       resolution,
@@ -649,6 +679,7 @@ class CanvasVectorLayerRenderer extends CanvasLayerRenderer {
           ? frameState.declutter?.[declutter]?.all().map((item) => item.value)
           : /** @type {unknown} */ (null)
       ),
+      declutter ? declutterExtent : undefined,
     );
   }
 
