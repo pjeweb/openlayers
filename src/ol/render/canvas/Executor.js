@@ -2,7 +2,12 @@
  * @module ol/render/canvas/Executor
  */
 import {equals} from '../../array.js';
-import {createEmpty, createOrUpdate, intersects} from '../../extent.js';
+import {
+  containsXY,
+  createEmpty,
+  createOrUpdate,
+  intersects,
+} from '../../extent.js';
 import {lineStringLength} from '../../geom/flat/length.js';
 import {
   offsetLineString,
@@ -901,6 +906,30 @@ class Executor {
             instruction[13] = width;
           }
 
+          // Polygon anchors and fit widths depend on the label baseline in map
+          // coordinates. Resolve them here so cached instructions also work
+          // after a view rotation, including on an unrotated layer canvas.
+          const polygonExtent =
+            /** @type {import('../../extent.js').Extent|undefined} */ (
+              instruction[26]
+            );
+          let interiorPoints;
+          if (polygonExtent) {
+            const baselineRotation =
+              (rotateWithView ? 0 : viewRotation) - rotation;
+            const polygon =
+              /** @type {import('../../geom/Polygon.js').default|import('../../geom/MultiPolygon.js').default|import('../Feature.js').default} */ (
+                currentGeometry
+              );
+            interiorPoints =
+              polygon.getType() === 'MultiPolygon'
+                ? /** @type {import('../../geom/MultiPolygon.js').default} */ (
+                    polygon
+                  ).getFlatInteriorPoints(baselineRotation)
+                : /** @type {import('../../geom/Polygon.js').default} */ (
+                    polygon
+                  ).getFlatInteriorPoint(baselineRotation);
+          }
           let geometryWidths;
           if (instruction.length > 25) {
             geometryWidths = /** @type {Array<number>|undefined} */ (
@@ -932,17 +961,33 @@ class Executor {
           }
           let widthIndex = 0;
           for (; d < dd; d += 2) {
+            let pointX = pixelCoordinates[d];
+            let pointY = pixelCoordinates[d + 1];
+            let geometryWidth;
+            if (interiorPoints && polygonExtent) {
+              const index = widthIndex++ * 3;
+              const x = interiorPoints[index];
+              const y = interiorPoints[index + 1];
+              if (!containsXY(polygonExtent, x, y)) {
+                continue;
+              }
+              pointX = transform[0] * x + transform[2] * y + transform[4];
+              pointY = transform[1] * x + transform[3] * y + transform[5];
+              geometryWidth = interiorPoints[index + 2] / this.resolution;
+            } else if (geometryWidths) {
+              geometryWidth = geometryWidths[widthIndex++];
+            }
             if (
-              geometryWidths &&
-              geometryWidths[widthIndex++] < width / this.pixelRatio
+              geometryWidth !== undefined &&
+              geometryWidth < width / this.pixelRatio
             ) {
               continue;
             }
             const dimensions = this.calculateImageOrLabelDimensions_(
               image.width,
               image.height,
-              pixelCoordinates[d],
-              pixelCoordinates[d + 1],
+              pointX,
+              pointY,
               width,
               height,
               anchorX,

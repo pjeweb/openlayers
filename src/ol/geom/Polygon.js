@@ -53,6 +53,12 @@ class Polygon extends SimpleGeometry {
 
     /**
      * @private
+     * @type {number}
+     */
+    this.flatInteriorPointRotation_ = 0;
+
+    /**
+     * @private
      * @type {import("../coordinate.js").Coordinate|null}
      */
     this.flatInteriorPoint_ = null;
@@ -231,10 +237,14 @@ class Polygon extends SimpleGeometry {
   }
 
   /**
+   * @param {number} [rotation] Scanline rotation in radians, counterclockwise.
    * @return {Array<number>} Interior point.
    */
-  getFlatInteriorPoint() {
-    if (this.flatInteriorPointRevision_ != this.getRevision()) {
+  getFlatInteriorPoint(rotation = 0) {
+    if (
+      this.flatInteriorPointRevision_ != this.getRevision() ||
+      this.flatInteriorPointRotation_ !== rotation
+    ) {
       const flatCenter = getCenter(this.getExtent());
       this.flatInteriorPoint_ = getInteriorPointOfArray(
         this.getOrientedFlatCoordinates(),
@@ -243,8 +253,11 @@ class Polygon extends SimpleGeometry {
         this.stride,
         flatCenter,
         0,
+        undefined,
+        rotation,
       );
       this.flatInteriorPointRevision_ = this.getRevision();
+      this.flatInteriorPointRotation_ = rotation;
     }
     return /** @type {import("../coordinate.js").Coordinate} */ (
       this.flatInteriorPoint_

@@ -321,31 +321,21 @@ class CanvasTextBuilder extends CanvasBuilder {
           stride = 2;
           break;
         case 'Polygon':
+        case 'MultiPolygon':
           flatCoordinates =
-            /** @type {import("../../geom/Polygon.js").default} */ (
-              geometry
-            ).getFlatInteriorPoint();
-          if (!textState.overflow && geometryWidths) {
-            geometryWidths.push(flatCoordinates[2] / this.resolution);
+            geometryType === 'Polygon'
+              ? /** @type {import('../../geom/Polygon.js').default} */ (
+                  geometry
+                ).getFlatInteriorPoint()
+              : /** @type {import('../../geom/MultiPolygon.js').default} */ (
+                  geometry
+                ).getFlatInteriorPoints();
+          if (geometryWidths) {
+            for (let i = 2; i < flatCoordinates.length; i += 3) {
+              geometryWidths.push(flatCoordinates[i] / this.resolution);
+            }
           }
           stride = 3;
-          break;
-        case 'MultiPolygon':
-          const interiorPoints =
-            /** @type {import("../../geom/MultiPolygon.js").default} */ (
-              geometry
-            ).getFlatInteriorPoints();
-          flatCoordinates = [];
-          for (let i = 0, ii = interiorPoints.length; i < ii; i += 3) {
-            if (!textState.overflow && geometryWidths) {
-              geometryWidths.push(interiorPoints[i + 2] / this.resolution);
-            }
-            flatCoordinates.push(interiorPoints[i], interiorPoints[i + 1]);
-          }
-          if (flatCoordinates.length === 0) {
-            return;
-          }
-          stride = 2;
           break;
         default:
           return;
@@ -353,7 +343,20 @@ class CanvasTextBuilder extends CanvasBuilder {
       if (!flatCoordinates) {
         return;
       }
-      const end = this.appendFlatPointCoordinates(flatCoordinates, stride);
+      const polygonText =
+        !textState.overflow &&
+        (geometryType === 'Polygon' || geometryType === 'MultiPolygon');
+      let end;
+      if (polygonText) {
+        // The anchor can move when the view rotates, so do not discard polygon
+        // components based on their unrotated interior points.
+        for (let i = 0; i < flatCoordinates.length; i += stride) {
+          coordinates.push(flatCoordinates[i], flatCoordinates[i + 1]);
+        }
+        end = coordinates.length;
+      } else {
+        end = this.appendFlatPointCoordinates(flatCoordinates, stride);
+      }
       if (end === begin) {
         return;
       }
@@ -439,6 +442,7 @@ class CanvasTextBuilder extends CanvasBuilder {
         this.textOffsetX_,
         this.textOffsetY_,
         geometryWidths,
+        polygonText ? this.getBufferedMaxExtent() : null,
       ]);
       const scale = 1 / pixelRatio;
       // Set default fill for hit detection background
@@ -475,6 +479,7 @@ class CanvasTextBuilder extends CanvasBuilder {
         this.textOffsetX_,
         this.textOffsetY_,
         geometryWidths,
+        polygonText ? this.getBufferedMaxExtent() : null,
       ]);
 
       this.endGeometry(feature);

@@ -6,12 +6,16 @@ import MultiLineString from '../../../../../../src/ol/geom/MultiLineString.js';
 import MultiPoint from '../../../../../../src/ol/geom/MultiPoint.js';
 import MultiPolygon from '../../../../../../src/ol/geom/MultiPolygon.js';
 import Point from '../../../../../../src/ol/geom/Point.js';
-import Polygon from '../../../../../../src/ol/geom/Polygon.js';
+import Polygon, {fromExtent} from '../../../../../../src/ol/geom/Polygon.js';
+import RenderFeature from '../../../../../../src/ol/render/Feature.js';
 import Executor from '../../../../../../src/ol/render/canvas/Executor.js';
 import CanvasInstruction from '../../../../../../src/ol/render/canvas/Instruction.js';
 import TextBuilder from '../../../../../../src/ol/render/canvas/TextBuilder.js';
 import Text from '../../../../../../src/ol/style/Text.js';
-import {create as createTransform} from '../../../../../../src/ol/transform.js';
+import {
+  compose,
+  create as createTransform,
+} from '../../../../../../src/ol/transform.js';
 
 function createBuilder() {
   return new TextBuilder(1, [-180, -90, 180, 90], 0.02, 1, true);
@@ -19,6 +23,7 @@ function createBuilder() {
 
 function createContext() {
   return {
+    canvas: {width: 200, height: 200},
     fill: function () {},
     stroke: function () {},
     beginPath: function () {},
@@ -44,7 +49,7 @@ function executeInstructions(
   const replayImageOrLabelStub = vi
     .spyOn(executor, 'replayImageOrLabel_')
     .mockImplementation(() => {});
-  executor.execute(context, 1, transform);
+  executor.execute(context, 1, transform, 0);
   assert.strictEqual(
     executor.drawLabelWithPointPlacement_.mock.calls.length,
     expectedDrawTextImageCalls,
@@ -289,7 +294,7 @@ describe('ol.render.canvas.TextBuilder', function () {
     executeInstructions(builder, 1, 2);
   });
 
-  it('generates a matching geometry widths array for multipolygons', function () {
+  it('retains all multipolygon anchors for rotation at execution time', function () {
     const feature = new Feature(
       new MultiPolygon([
         [
@@ -328,11 +333,216 @@ describe('ol.render.canvas.TextBuilder', function () {
       }),
     );
     builder.drawText(feature.getGeometry(), feature);
-    assert.lengthOf(builder.coordinates, 2);
+    assert.lengthOf(builder.coordinates, 6);
     assert.lengthOf(builder.instructions, 3);
     const geometryWidths = builder.instructions[1][25];
-    assert.lengthOf(geometryWidths, 1);
-    assert.strictEqual(geometryWidths[0], 120);
+    assert.deepEqual(geometryWidths, [130, 120, 110]);
+    executeInstructions(builder, 1, 1);
+  });
+
+  describe('rotated polygon label fit', function () {
+    function createExecutor(
+      geometry,
+      rotation,
+      rotateWithView,
+      overflow = false,
+      pixelRatio = 1,
+      maxExtent = [-200, -200, 200, 200],
+    ) {
+      const feature =
+        geometry instanceof RenderFeature ? geometry : new Feature(geometry);
+      const builder = new TextBuilder(0, maxExtent, 1, pixelRatio);
+      builder.setTextStyle(
+        new Text({text: 'label', rotation, rotateWithView, overflow}),
+      );
+      builder.drawText(geometry, feature);
+      const executor = new Executor(1, pixelRatio, false, builder.finish());
+      vi.spyOn(executor, 'drawLabelWithPointPlacement_').mockReturnValue({
+        label: {width: 40 * pixelRatio, height: 10 * pixelRatio},
+        anchorX: 20,
+        anchorY: 5,
+      });
+      vi.spyOn(executor, 'replayImageOrLabel_').mockImplementation(() => {});
+      return executor;
+    }
+
+    function execute(executor, viewRotation, canvasRotated) {
+      const transform = compose(
+        createTransform(),
+        100,
+        100,
+        1,
+        -1,
+        canvasRotated ? -viewRotation : 0,
+        0,
+        0,
+      );
+      executor.replayImageOrLabel_.mockClear();
+      executor.execute(
+        createContext(),
+        [200, 200],
+        transform,
+        viewRotation,
+        false,
+      );
+      return executor.replayImageOrLabel_.mock.calls.length;
+    }
+
+    const halfPi = Math.PI / 2;
+    for (const [textRotation, viewRotation, rotateWithView, count] of [
+      [0, 0, false, 0],
+      [halfPi, 0, false, 1],
+      [0, halfPi, false, 1],
+      [0, halfPi, true, 0],
+      [halfPi, halfPi, false, 0],
+      [halfPi, halfPi, true, 1],
+      [halfPi / 2, halfPi / 2, false, 0],
+      [-halfPi / 2, halfPi / 2, false, 1],
+    ]) {
+      for (const canvasRotated of [false, true]) {
+        it(`fits text=${textRotation}, view=${viewRotation}, rotateWithView=${rotateWithView}, canvasRotated=${canvasRotated}`, function () {
+          const executor = createExecutor(
+            fromExtent([-5, -50, 5, 50]),
+            textRotation,
+            rotateWithView,
+          );
+          assert.strictEqual(
+            execute(executor, viewRotation, canvasRotated),
+            count,
+          );
+        });
+      }
+    }
+
+    it('reuses instructions through view rotations and for hit detection', function () {
+      const executor = createExecutor(
+        fromExtent([-5, -50, 5, 50]),
+        0,
+        false,
+        false,
+        2,
+      );
+      assert.strictEqual(execute(executor, 0, false), 0);
+      assert.strictEqual(execute(executor, halfPi, false), 1);
+      assert.strictEqual(execute(executor, 0, true), 0);
+      const transform = compose(
+        createTransform(),
+        100,
+        100,
+        1,
+        -1,
+        -halfPi,
+        0,
+        0,
+      );
+      executor.executeHitDetection(
+        createContext(),
+        transform,
+        halfPi,
+        () => {},
+      );
+      assert.strictEqual(executor.replayImageOrLabel_.mock.calls.length, 1);
+    });
+
+    it('leaves overflow enabled regardless of the baseline', function () {
+      const executor = createExecutor(
+        fromExtent([-5, -50, 5, 50]),
+        0,
+        true,
+        true,
+      );
+      assert.strictEqual(execute(executor, 0, false), 1);
+      assert.strictEqual(execute(executor, halfPi, false), 1);
+    });
+
+    for (const renderFeature of [false, true]) {
+      it(`tests each multipolygon component (RenderFeature=${renderFeature})`, function () {
+        const multi = new MultiPolygon([
+          fromExtent([-5, -50, 5, 50]),
+          fromExtent([20, -5, 120, 5]),
+        ]);
+        const geometry = renderFeature
+          ? new RenderFeature(
+              'MultiPolygon',
+              multi.getOrientedFlatCoordinates(),
+              multi.getEndss().flat(),
+              2,
+              {},
+            )
+          : multi;
+        const executor = createExecutor(geometry, 0, false);
+        assert.strictEqual(execute(executor, 0, false), 1);
+        assert.strictEqual(execute(executor, halfPi, false), 1);
+      });
+    }
+
+    it('clips the current anchor instead of the original anchor', function () {
+      const polygon = new Polygon([
+        [
+          [-50, -50],
+          [50, -50],
+          [50, 50],
+          [20, 50],
+          [20, -20],
+          [-20, -20],
+          [-20, 50],
+          [-50, 50],
+          [-50, -50],
+        ],
+      ]);
+      const executor = createExecutor(
+        polygon,
+        0,
+        false,
+        false,
+        1,
+        [-10, -50, 10, 0],
+      );
+      executor.drawLabelWithPointPlacement_.mockReturnValue({
+        label: {width: 20, height: 10},
+        anchorX: 10,
+        anchorY: 5,
+      });
+      assert.strictEqual(execute(executor, 0, false), 0);
+      assert.strictEqual(execute(executor, halfPi, false), 1);
+    });
+
+    it('fits RenderFeature polygon labels against the rotated baseline', function () {
+      const polygon = fromExtent([-5, -50, 5, 50]);
+      const geometry = new RenderFeature(
+        'Polygon',
+        polygon.getFlatCoordinates(),
+        polygon.getEnds(),
+        2,
+        {},
+      );
+      const executor = createExecutor(geometry, 0, false);
+      assert.strictEqual(execute(executor, 0, false), 0);
+      assert.strictEqual(execute(executor, halfPi, true), 1);
+    });
+
+    it('uses the rotated anchor in a concave polygon', function () {
+      const polygon = new Polygon([
+        [
+          [-50, -50],
+          [50, -50],
+          [50, 50],
+          [20, 50],
+          [20, -20],
+          [-20, -20],
+          [-20, 50],
+          [-50, 50],
+          [-50, -50],
+        ],
+      ]);
+      const executor = createExecutor(polygon, halfPi, false);
+      assert.strictEqual(execute(executor, 0, false), 0);
+      // Make the label shorter than the 30-unit vertical segment.
+      executor.instructions[1][13] = 20;
+      assert.strictEqual(execute(executor, 0, false), 1);
+      const dimensions = executor.replayImageOrLabel_.mock.calls[0][3];
+      assert.closeTo(dimensions.declutterBox.minY, 115, 1e-9);
+    });
   });
 
   describe('line label clipping to the rendered extent', function () {
